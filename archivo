@@ -1,0 +1,233 @@
+---
+title: "Proyecto Análisis de Regresión"
+author:
+- Cristián Dibán
+- Yerko Lincoyán
+- Romina Mercado
+- Maximiliano Norbu
+date: "27 de septiembre de 2020"
+output:
+  prettydoc::html_pretty:
+    highlight: tango
+    theme: tactile
+tags:
+- regression analysis
+abstract: |
+  Análisis y propuesta de modelo de regresión lineal de la base de datos \"abalone data set\"
+---
+
+```{r setup, include=FALSE, echo=FALSE}
+knitr::opts_chunk$set(cache  = TRUE, warning = FALSE, message = FALSE)
+library(rio)
+library(readr)
+library(dplyr)
+library(car)
+library(lmtest)
+library(ggplot2)
+library(GGally)
+library(gridExtra)
+library(MASS)
+library(leaps)
+library(glmnet)
+library(caret)
+library(gbm)
+library(knitr)
+library(yaml)
+library(remotes)
+library(lattice)
+library(knitr)      
+library(readxl)     
+library(DT) 
+library(tidyverse)
+
+```
+
+Las variables a analizar se clasifican de la siguinte manera:
+$$
+\begin{array}{l|l|l|l}
+{\text { Nombre }} & \text { Tipo } & \text { Medida } & \text { Descripción} \\
+\text { Sexo } & \text { categórica } & & \text{ }\mathrm{M}, \mathrm{F}, \mathrm{I}\text { (Infante) } \\
+\text { Largo } & \text { continua } & \mathrm{mm} & \text { largo total de la concha } \\
+\text { Diámetro } & \text { continua } & \mathrm{mm} & \text { ancho de la concha } \\
+\text { Altura } & \text { continua } & \mathrm{mm} & \text { altura total del molusco } \\
+\text { Peso_completo } & \text { continua } & \text {gramos } & \text { peso total del molusco } \\
+\text { Peso_carne } & \text { continua } & \text {gramos } & \text { peso de los órganos} \\
+\text { Peso_víscera } & \text { continua } & \text {gramos } & \text { peso intestinal (sin sangrado) } \\
+\text { Peso_concha } & \text { continua } & \text {gramos } & \text { peso de la concha seca } \\
+\text { Anillos } & \text { discreta } & \text{entero  } &  \text { cantidad de anillos }
+\end{array}
+$$
+
+# **Introducción**
+
+<font size="3">
+
+Oreja de Mar es uno de los nombres más comunes que se usa para hablar de algún molusco de la familia Haliotidae. Estos mariscos son consumidos a lo largo de todo el mundo por lo que son muy cotizados. El precio de una oreja de mar está directamente relacionado con su edad, por lo que es importante para un granjero de orejas de mar saber la edad de sus animales: para saber cuánto cobrar al venderlos. Sin embargo, como se podrán imaginar, no es tan fácil determinar la edad de un molusco marino. Incluso, a veces sale más caro determinar la edad y venderlos al precio justo, que simplemente venderlos a un precio genérico. Es por esto que nuestro grupo intenta, a través de un análisis estadístico, encontrar un método para determinar la edad de las orejas de mar, que no requieran datos muy costosos de obtener. Estos datos pueden ser tanto las medidas del molusco o su peso, puesto que obtener esta data es más simple que los métodos actuales, los cuales involucran abrir al animal y revisarlo en un microscopio.
+
+Para esto, primero hicimos un análisis descriptivo de todas las variables: Largo, Diámetro, Altura, Peso completo, Peso de la carne, Peso de las Vísceras, Peso de la Concha, Cantidad de Anillos (*DECIR EN QUÉ MEDIDAS ESTÁ CADA VARIABLE*). Notar que nuestra variable respuesta es la cantidad de anillos, pues eso es lo que actualmente nos da la edad de las orejas de mar. Para este análisis inicial, calculamos medidas de tendencia central y de dispersión. *(Mostrar Gráficos/Tablas)*.
+
+De aquí podemos destacar que los valores máximos son mucho mayores a la media, llegando en algunos casos a ser 10 veces la media. También notamos que el promedio de edad es aproximadamente de 10 años.
+
+Luego hicimos un análisis de correlación entre las distintas variables, pero con un especial énfasis en la cantidad de anillos versus cada una de las otras. *(Mostrar Gráficos)*.
+
+
+</font> 
+
+# La base de datos
+Las variables que componen nuestra base de datos están sin categorizarse por nombre, por lo que le daremos los nombres que necesitamos, y además multiplicaremos las variables continuas por $200$ puesto que los valores actuales no representan las medidas en mimlímetros y gramos correspondientes, como se describe en la descripción de la tabla.
+
+```{r, include=FALSE,  echo=FALSE}
+abalone <- read_csv("abalone.data")
+names <-  c("Sexo", "Largo", "Diámetro", "Altura", "Peso_completo", "Peso_carne", "Peso_víscera", "Peso_concha", "Anillos")
+names(abalone) <- names
+
+abalone$Largo = abalone$Largo*200
+abalone$Diámetro = abalone$Diámetro*200
+abalone$Altura = abalone$Altura*200
+abalone$Peso_completo = abalone$Peso_completo*200
+abalone$Peso_carne = abalone$Peso_carne*200
+abalone$Peso_víscera = abalone$Peso_víscera*200
+abalone$Peso_concha = abalone$Peso_concha*200
+
+#Dejamos como factor a la variable Sexo
+abalone$Sexo <- as.factor(abalone$Sexo)
+
+
+
+```
+
+Ahora podemos ver que nuestras variables están correctas.
+```{r}
+str(abalone, give.attr = FALSE)
+```
+
+
+# Análisis descriptivo
+
+```{r}
+kable(summary(abalone, digits = 4, format = "markdown"))
+
+ggpairs(abalone, aes(colour = Sexo, alpha = 0.8), 
+        title="Pair plot de la BBDD de orejas de mar", legend = c(1,1)) + 
+  theme_grey(base_size = 8)
+
+```
+
+### Conclusiones del gráfico
+Al realizar este análisis, nos dimos cuenta que todas las variables tenían una correlación positiva con la variable respuesta. Y esta se encuentra en todos los casos entre 0,4 y 0,65. La variable que encontramos con menor correlación fue el peso de la carne, con un valor de 0,421. Por otro lado, la variable con mayor correlación fue el peso de la concha, con un valor de 0,628. Con todo esta información, hicimos el siguiente modelo de regresión: 
+
+No hay mucha diferencia entre los datos de *male* y *female*.
+
+
+
+
+Podemos agregar la variable *"Dif.Pesos"* para resumir la información de las diferentes variables de peso.
+
+```{r}
+abalone$Dif.pesos <- abalone$Peso_completo - (abalone$Peso_víscera + abalone$Peso_carne + abalone$Peso_concha)
+
+ggplot(abalone, aes(x=Dif.pesos)) +
+  geom_histogram(colour="dodgerblue",fill=rgb(1,.54,0,.7), bins = 30) +
+  scale_y_continuous(name="count") + 
+  labs(title="Histograma de la diferencia de pesos menores que cero")
+```
+
+
+
+Para ajustar un modelo lineal, veremos qué variable nos sirve más, por lo que analizaremos la significancia de los parámetros.
+
+```{r}
+#Separamos la dato usando un test 70/30
+set.seed(42)
+indexes <- sample(1:nrow(abalone), size = 0.3 * nrow(abalone))
+abalone_train <- abalone[-indexes,]
+abalone_test <- abalone[indexes,]
+
+
+abalone_add <- lm(Anillos ~ 
+                  Sexo+Largo+Diámetro+Altura+ Peso_completo
+                  +Peso_carne+Peso_víscera
+                  +Peso_concha,data = abalone_train)
+
+summary(abalone_add)
+par(mfrow = c(2, 2))
+plot(abalone_add)
+```
+
+#########################################ESTO VA O NO#############################
+
+Para estabilizar la varianza, usaremos la log-verosimilitud, usando *$\lambda = 0$*, así, la log-verosimilitud se maximiza y los intervalos se acortan. Por lo tanto, usaremos la transformación de *$log(Anillos)$* para nuestro modelo.
+
+```{r}
+par(mfrow = c(1, 1))
+boxcox(abalone_add,  plotit = TRUE, lambda = seq(-0.1, 0.1, by = 0.1))
+
+```
+
+
+```{r}
+ordenar = c(sort(abalone$Largo, decreasing = FALSE))
+
+abalone_add_log <- lm(log(Anillos) ~ 
+                        Sexo + Largo + Diámetro + Altura + Peso_completo + Peso_carne + Peso_víscera + Peso_concha, 
+                      data = abalone_train)
+summary(abalone_add_log)
+
+par(mfrow = c(3, 3),oma=c(0,0,0,0))
+
+create_scatter_plot <- function(xvar,yvar,xtitle,ytitle) {
+  ggplot(abalone_train,aes(x=xvar,y=yvar, col=Sexo)) + 
+    geom_point() + 
+    geom_jitter() + 
+    xlab(paste(xtitle)) +
+    ylab(paste(ytitle))
+}
+
+grid.arrange(
+  create_scatter_plot(abalone_train$Largo,abalone_train$Anillos,"Largo","Anillos"),
+  create_scatter_plot(abalone_train$Diámetro,abalone_train$Anillos,"Diámetro","Anillos"),
+  create_scatter_plot(abalone_train$Altura,abalone_train$Anillos,"Altura","Anillos"),
+  create_scatter_plot(abalone_train$Peso_completo,abalone_train$Anillos,"Peso_completo","Anillos"),
+  create_scatter_plot(abalone_train$Peso_concha,abalone_train$Anillos,"Peso_Concha","Anillos"),
+  create_scatter_plot(abalone_train$Peso_carne,abalone_train$Anillos,"Peso_Carne","Anillos"),
+  create_scatter_plot(abalone_train$Peso_víscera,abalone_train$Anillos,"Peso_Viscera","Anillos")
+)
+
+```
+
+
+```{r}
+Modelo <- function(vector){
+  Sexo <- vector[1]
+  Largo <- vector[2]
+  Diametro <- vector[3]
+  Altura <- vector[4]
+  Peso_Completo <- vector[5]
+  Peso_Carne <- vector[6]
+  Peso_Viscera <- vector[7]
+  Peso_Concha <- vector[8]
+  
+  Intercepto <- 3.946559
+  
+  if (Sexo == "F"){
+    constante = 0}
+  if (Sexo == "M"){
+    constante = 0.010608}
+  if (Sexo == "I"){
+    constante = -0.883507}
+  
+  Prediccion_anillo <- Intercepto + constante + Largo*(-0.013912)+ Diametro*(0.074949)+ Altura*(0.045139)+ Peso_Completo*(0.038447)+ Peso_Carne*(-0.088469)+ Peso_Viscera*(-0.050926)+ Peso_Concha*(0.044969)
+  
+  return(Prediccion_anillo)
+}
+
+
+abalone_train[1,]
+
+Modelo(abalone_train[1,])
+
+#revisar que concuerde con predict.lm()
+```
+
+
+
